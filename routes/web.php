@@ -74,6 +74,12 @@ Route::delete('/attachments/{attachment}', [TaskAttachmentController::class, 'de
     Route::post('/tasks/{task}/priority', [\App\Http\Controllers\TaskController::class, 'priority'])
     ->name('tasks.priority');
 
+    Route::patch('/tasks/{task}', [\App\Http\Controllers\TaskController::class, 'update'])
+    ->name('tasks.update');
+
+Route::delete('/tasks/{task}', [\App\Http\Controllers\TaskController::class, 'destroy'])
+    ->name('tasks.destroy');
+
 
     Route::middleware(['auth'])->group(function () {
     Route::get('/projects/{project}/members', [ProjectMemberController::class, 'index'])
