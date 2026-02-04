@@ -25,7 +25,7 @@ class TaskCommentController extends Controller
         if (function_exists('log_activity')) {
             log_activity(
                 'ADD_COMMENT',
-                "Added comment on task: {$task->title}",
+                "เพิ่มคอมเมนต์ในงาน \"{$task->title}\"",
                 null,
                 \App\Models\Board::find($task->board_id)->project_id,
                 Auth::id()
@@ -51,11 +51,16 @@ class TaskCommentController extends Controller
     ]);
 
     if (function_exists('log_activity')) {
+        $comment->loadMissing('task'); // กัน task ยังไม่ถูกโหลด
+
+        $taskTitle = optional($comment->task)->title ?? 'งาน';
+        $board = \App\Models\Board::find(optional($comment->task)->board_id);
+
         log_activity(
             'UPDATE_COMMENT',
-            'Updated a comment',
+            "แก้ไขคอมเมนต์ในงาน \"{$taskTitle}\"",
             null,
-            \App\Models\Board::find($comment->task->board_id)->project_id,
+            optional($board)->project_id,
             Auth::id()
         );
     }
@@ -65,19 +70,21 @@ class TaskCommentController extends Controller
 
     public function destroy(TaskComment $comment)
     {
-        if ($comment->user_id !== Auth::id()) {
-            abort(403);
-        }
-
         if (function_exists('log_activity')) {
+            $comment->loadMissing('task');
+
+            $taskTitle = optional($comment->task)->title ?? 'งาน';
+            $board = \App\Models\Board::find(optional($comment->task)->board_id);
+
             log_activity(
                 'DELETE_COMMENT',
-                'Deleted a comment',
+                "ลบคอมเมนต์ในงาน \"{$taskTitle}\"",
                 null,
-                \App\Models\Board::find($comment->task->board_id)->project_id,
+                optional($board)->project_id,
                 Auth::id()
             );
         }
+
 
         $comment->delete();
 

@@ -116,7 +116,7 @@ class ProjectInviteController extends Controller
         if (function_exists('log_activity')) {
             log_activity(
                 'INVITE_MEMBER',
-                "Invited {$email} to project",
+                "ส่งคำเชิญเข้าร่วมโปรเจกต์ให้ {$email}",
                 $project->workspace_id,
                 $project->id,
                 Auth::id()
@@ -178,7 +178,7 @@ class ProjectInviteController extends Controller
         if (function_exists('log_activity')) {
             log_activity(
                 'ACCEPT_INVITE',
-                "Accepted invite to project {$project->name}",
+                "ยอมรับคำเชิญเข้าร่วมโปรเจกต์ \"{$project->name}\"",
                 $project->workspace_id,
                 $project->id,
                 $user->id
@@ -189,6 +189,33 @@ class ProjectInviteController extends Controller
             ->route('projects.index', $project->workspace_id)
             ->with('success', 'เข้าร่วมโปรเจกต์เรียบร้อยแล้ว');
     }
+
+    public function decline(ProjectInvite $invite)
+{
+    $user = Auth::user();
+
+    if ($invite->email !== $user->email) {
+        abort(403);
+    }
+
+    $project = $invite->project;
+
+    // ลบเพื่อให้เชิญใหม่ได้ (ไม่ติด unique)
+    $invite->delete();
+
+    if (function_exists('log_activity')) {
+        log_activity(
+            'DECLINE_INVITE',
+            "ปฏิเสธคำเชิญเข้าร่วมโปรเจกต์ \"{$project->name}\"",
+            $project->workspace_id,
+            $project->id,
+            $user->id
+        );
+    }
+
+    return back()->with('success', 'ปฏิเสธคำเชิญแล้ว');
+}
+
 
     /* -------------------------------------------------
      |  Cancel invite (Owner only)

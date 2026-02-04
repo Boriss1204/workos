@@ -49,7 +49,7 @@ class ProjectController extends Controller
 
         log_activity(
             'CREATE_PROJECT',
-            "Created project: {$project->name}",
+            "สร้างโปรเจกต์ \"{$project->name}\"",
             $workspaceId,
             $project->id
         );

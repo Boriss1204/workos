@@ -30,15 +30,21 @@ class TaskAttachmentController extends Controller
             'file_size' => $file->getSize(),
         ]);
 
-        if (function_exists('log_activity')) {
-            log_activity(
-                'ADD_ATTACHMENT',
-                "Added attachment to task: {$task->title}",
-                null,
-                \App\Models\Board::find($task->board_id)->project_id,
-                Auth::id()
-            );
-        }
+            if (function_exists('log_activity')) {
+                $attachment->loadMissing('task');
+
+                $taskTitle = optional($attachment->task)->title ?? 'งาน';
+                $board = \App\Models\Board::find(optional($attachment->task)->board_id);
+
+                log_activity(
+                    'ADD_ATTACHMENT',
+                    "แนบไฟล์ในงาน \"{$taskTitle}\"",
+                    null,
+                    optional($board)->project_id,
+                    Auth::id()
+                );
+            }
+
 
         return redirect()->back();
     }
@@ -52,14 +58,20 @@ class TaskAttachmentController extends Controller
         Storage::disk('public')->delete($attachment->file_path);
 
         if (function_exists('log_activity')) {
+            $attachment->loadMissing('task');
+
+            $taskTitle = optional($attachment->task)->title ?? 'งาน';
+            $board = \App\Models\Board::find(optional($attachment->task)->board_id);
+
             log_activity(
                 'DELETE_ATTACHMENT',
-                "Deleted attachment: {$attachment->original_name}",
+                "ลบไฟล์ \"{$attachment->original_name}\" ออกจากงาน \"{$taskTitle}\"",
                 null,
-                \App\Models\Board::find($attachment->task->board_id)->project_id,
+                optional($board)->project_id,
                 Auth::id()
             );
         }
+
 
         $attachment->delete();
 

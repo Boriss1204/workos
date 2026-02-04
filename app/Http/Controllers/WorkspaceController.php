@@ -37,8 +37,8 @@ class WorkspaceController extends Controller
 
         log_activity(
             'CREATE_WORKSPACE',
-            "Created workspace: {$workspace->name}",
-            $workspace->id,
+            "สร้างเวิร์กสเปซ \"{$workspace->name}\"",
+            $   $workspace->id,
             null
         );
         

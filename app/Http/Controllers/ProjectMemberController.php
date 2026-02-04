@@ -78,7 +78,7 @@ class ProjectMemberController extends Controller
         if (function_exists('log_activity')) {
             log_activity(
                 'INVITE_MEMBER',
-                "Invited {$user->email} to project: {$project->name}",
+                "ส่งคำเชิญเข้าร่วมโปรเจกต์ \"{$project->name}\" ให้ {$user->email}",
                 $project->workspace_id,
                 $project->id,
                 Auth::id()
@@ -108,14 +108,18 @@ class ProjectMemberController extends Controller
         $member->update(['role' => $request->role]);
 
         if (function_exists('log_activity')) {
+            $member->loadMissing('user');
+            $email = optional($member->user)->email ?? 'สมาชิก';
+
             log_activity(
                 'CHANGE_MEMBER_ROLE',
-                "Changed member role to {$request->role}",
+                "เปลี่ยนสิทธิ์ของ {$email} เป็น {$request->role}",
                 $project->workspace_id,
                 $project->id,
                 Auth::id()
             );
         }
+
 
         return back();
     }
@@ -133,23 +137,28 @@ class ProjectMemberController extends Controller
             }
         }
 
-        $email = optional($member->user)->email;
+        // ----- LOG (วางก่อน delete) -----
+        if (function_exists('log_activity')) {
+            $member->loadMissing('user', 'project');
+
+            $email = optional($member->user)->email ?? 'สมาชิก';
+            $projectName = optional($member->project)->name ?? ($project->name ?? 'โปรเจกต์');
+
+            log_activity(
+                'REMOVE_MEMBER',
+                "ลบสมาชิก {$email} ออกจากโปรเจกต์ \"{$projectName}\"",
+                $project->workspace_id,
+                $project->id,
+                Auth::id()
+            );
+        }
+        // -------------------------------
 
         $member->delete();
 
-        if (function_exists('log_activity')) {
-            log_activity(
-                'REMOVE_MEMBER',
-                "Removed member {$email} from project: {$project->name}",
-                $project->workspace_id,
-                $project->id,
-                auth()->id()
-            );
-        }
-
-
         return back();
     }
+
 
     public function leave(Project $project)
 {
@@ -167,16 +176,19 @@ class ProjectMemberController extends Controller
     }
 
         // ----- LOG: leave project (วางก่อน $member->delete()) -----
-    if (function_exists('log_activity')) {
-        $user = auth()->user();
-        log_activity(
-            'LEAVE_PROJECT',
-            "{$user->email} left project: {$project->name}",
-            $project->workspace_id,
-            $project->id,
-            $user->id
-        );
-    }
+        if (function_exists('log_activity')) {
+            $user = Auth::user();
+
+            log_activity(
+                'LEAVE_PROJECT',
+                "{$user->email} ออกจากโปรเจกต์",
+                $project->workspace_id,
+                $project->id,
+                $user->id
+            );
+        }
+
+
     // ----------------------------------------------------------
 
     $member->delete();

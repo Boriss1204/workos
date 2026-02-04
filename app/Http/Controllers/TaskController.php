@@ -61,7 +61,7 @@ class TaskController extends Controller
         if (function_exists('log_activity')) {
             log_activity(
                 'CREATE_TASK',
-                "Created task: {$task->title}",
+                "สร้างงาน \"{$task->title}\"",
                 null,
                 $projectId,
                 Auth::id()
@@ -89,7 +89,7 @@ class TaskController extends Controller
         if (function_exists('log_activity')) {
             log_activity(
                 'MOVE_TASK',
-                "Moved task '{$task->title}' to column {$task->column->name}",
+                "ย้ายงาน \"{$task->title}\" ไปยังคอลัมน์ {$task->column->name}",
                 null,
                 $task->board->project_id,
                 Auth::id()
@@ -136,7 +136,7 @@ class TaskController extends Controller
 
             log_activity(
                 'ASSIGN_TASK',
-                "Assigned task '{$task->title}' to {$assigneeText}",
+                "มอบหมายงาน \"{$task->title}\" ให้ {$assigneeText}",
                 $workspaceId,
                 $projectId,
                 Auth::id()
@@ -166,7 +166,7 @@ class TaskController extends Controller
 
             log_activity(
                 'SET_PRIORITY',
-                "Set priority '{$task->priority}' for task '{$task->title}'",
+                "ตั้งค่า Priority เป็น {$task->priority} สำหรับงาน \"{$task->title}\"",
                 $workspaceId,
                 $projectId,
                 Auth::id()
@@ -199,7 +199,7 @@ class TaskController extends Controller
         if (function_exists('log_activity')) {
             log_activity(
                 'UPDATE_TASK',
-                "Updated task '{$task->title}'",
+                "แก้ไขงาน \"{$task->title}\"",
                 optional(optional($task->board)->project)->workspace_id,
                 $projectId,
                 Auth::id()
@@ -220,7 +220,7 @@ class TaskController extends Controller
         if (function_exists('log_activity')) {
             log_activity(
                 'DELETE_TASK',
-                "Deleted task '{$title}'",
+                "ลบงาน \"{$title}\"",
                 null,
                 $projectId,
                 Auth::id()
