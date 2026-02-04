@@ -20,56 +20,102 @@ class DemoSeeder extends Seeder
 {
     public function run(): void
     {
-        // ===== User เดโม =====
-        $user = User::firstOrCreate(
-            ['email' => 'demo@workos.test'],
+        /*
+        |--------------------------------------------------------------------------
+        | Users
+        |--------------------------------------------------------------------------
+        */
+        $owner = User::firstOrCreate(
+            ['email' => 'owner@workos.test'],
             [
-                'name' => 'Demo User',
+                'name' => 'Owner User',
                 'password' => Hash::make('password'),
             ]
         );
 
-        // ===== Workspace =====
+        $member1 = User::firstOrCreate(
+            ['email' => 'member1@workos.test'],
+            [
+                'name' => 'Member One',
+                'password' => Hash::make('password'),
+            ]
+        );
+
+        $member2 = User::firstOrCreate(
+            ['email' => 'member2@workos.test'],
+            [
+                'name' => 'Member Two',
+                'password' => Hash::make('password'),
+            ]
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Workspace
+        |--------------------------------------------------------------------------
+        */
         $workspace = Workspace::firstOrCreate(
             ['name' => 'Demo Workspace'],
-            ['owner_user_id' => $user->id]
+            ['owner_user_id' => $owner->id]
         );
 
-        WorkspaceMember::firstOrCreate(
-            [
-                'workspace_id' => $workspace->id,
-                'user_id' => $user->id,
-            ],
-            ['role' => 'owner']
-        );
+        foreach ([
+            [$owner, 'owner'],
+            [$member1, 'member'],
+            [$member2, 'member'],
+        ] as [$user, $role]) {
+            WorkspaceMember::firstOrCreate(
+                [
+                    'workspace_id' => $workspace->id,
+                    'user_id' => $user->id,
+                ],
+                ['role' => $role]
+            );
+        }
 
-        // ===== Project =====
+        /*
+        |--------------------------------------------------------------------------
+        | Project
+        |--------------------------------------------------------------------------
+        */
         $project = Project::firstOrCreate(
             [
                 'workspace_id' => $workspace->id,
                 'name' => 'Demo Project',
             ],
             [
-                'created_by' => $user->id,
+                'created_by' => $owner->id,
             ]
         );
 
-        ProjectMember::firstOrCreate(
-            [
-                'project_id' => $project->id,
-                'user_id' => $user->id,
-            ],
-            ['role' => 'owner']
-        );
+        foreach ([
+            [$owner, 'owner'],
+            [$member1, 'member'],
+            [$member2, 'member'],
+        ] as [$user, $role]) {
+            ProjectMember::firstOrCreate(
+                [
+                    'project_id' => $project->id,
+                    'user_id' => $user->id,
+                ],
+                ['role' => $role]
+            );
+        }
 
-        // ===== Board =====
-        // ตาราง boards ของคุณไม่มีคอลัมน์ name -> ใช้ project_id อย่างเดียว
+        /*
+        |--------------------------------------------------------------------------
+        | Board
+        |--------------------------------------------------------------------------
+        */
         $board = Board::firstOrCreate(
             ['project_id' => $project->id]
         );
 
-        // ===== Columns =====
-        // ตาราง board_columns มี position (NOT NULL) -> ต้องใส่ position ทุกครั้ง
+        /*
+        |--------------------------------------------------------------------------
+        | Board Columns (position is required)
+        |--------------------------------------------------------------------------
+        */
         $columns = [
             ['name' => 'To Do', 'position' => 1],
             ['name' => 'In Progress', 'position' => 2],
@@ -78,62 +124,46 @@ class DemoSeeder extends Seeder
 
         $columnMap = [];
 
-        foreach ($columns as $colData) {
-            $col = BoardColumn::firstOrCreate(
+        foreach ($columns as $col) {
+            $column = BoardColumn::firstOrCreate(
                 [
                     'board_id' => $board->id,
-                    'name' => $colData['name'],
+                    'name' => $col['name'],
                 ],
-                [
-                    'position' => $colData['position'],
-                ]
+                ['position' => $col['position']]
             );
 
-            // กันกรณี seed ซ้ำแล้วตำแหน่งเพี้ยน
-            if ((int)($col->position ?? 0) !== (int)$colData['position']) {
-                $col->position = $colData['position'];
-                $col->save();
+            if ((int)$column->position !== (int)$col['position']) {
+                $column->position = $col['position'];
+                $column->save();
             }
 
-            $columnMap[$colData['name']] = $col;
+            $columnMap[$col['name']] = $column;
         }
 
-        // ===== Tasks =====
+        /*
+        |--------------------------------------------------------------------------
+        | Tasks
+        |--------------------------------------------------------------------------
+        */
         $tasks = [
             [
                 'title' => 'ออกแบบหน้า Dashboard',
                 'column' => 'To Do',
                 'priority' => 'medium',
-                'description' => 'จัดหน้าให้สวย อ่านง่าย และพร้อมเดโม',
-                'due_days' => 7,
-            ],
-            [
-                'title' => 'สร้างระบบ Workspace',
-                'column' => 'Done',
-                'priority' => 'high',
-                'description' => 'สร้าง/จัดการเวิร์กสเปซและสมาชิก',
-                'due_days' => 2,
+                'created_by' => $owner->id,
             ],
             [
                 'title' => 'จัดการสมาชิกโปรเจกต์',
                 'column' => 'In Progress',
                 'priority' => 'urgent',
-                'description' => 'เชิญสมาชิก, เปลี่ยนสิทธิ์, ลบ/ออกจากโปรเจกต์',
-                'due_days' => 1,
+                'created_by' => $member1->id,
             ],
             [
                 'title' => 'เพิ่มระบบ Activity Log',
                 'column' => 'Done',
-                'priority' => 'medium',
-                'description' => 'บันทึกกิจกรรมหลักเพื่อใช้ตรวจสอบย้อนหลัง',
-                'due_days' => 3,
-            ],
-            [
-                'title' => 'เตรียมระบบ Seeder',
-                'column' => 'In Progress',
                 'priority' => 'high',
-                'description' => 'สร้างข้อมูลตัวอย่างสำหรับทดสอบ/สาธิตระบบ',
-                'due_days' => 1,
+                'created_by' => $member2->id,
             ],
         ];
 
@@ -146,26 +176,41 @@ class DemoSeeder extends Seeder
                 [
                     'column_id' => $columnMap[$t['column']]->id,
                     'priority' => $t['priority'],
-                    'description' => $t['description'] ?? null,
-                    'due_date' => isset($t['due_days'])
-                        ? Carbon::now()->addDays((int)$t['due_days'])->toDateString()
-                        : null,
-                    'created_by' => $user->id,
+                    'created_by' => $t['created_by'],
+                    'description' => 'งานตัวอย่างจาก Seeder',
+                    'due_date' => Carbon::now()->addDays(3)->toDateString(),
                 ]
             );
         }
 
-        // ===== Activity Log =====
-        ActivityLog::firstOrCreate(
-            [
-                'action' => 'DEMO_SEED',
-                'workspace_id' => $workspace->id,
-                'project_id' => $project->id,
-                'user_id' => $user->id,
-            ],
-            [
-                'details' => 'สร้างข้อมูลเดโมสำหรับการสาธิตระบบ (Seeder)',
-            ]
-        );
+        /*
+        |--------------------------------------------------------------------------
+        | Activity Logs
+        |--------------------------------------------------------------------------
+        */
+        ActivityLog::firstOrCreate([
+            'action' => 'DEMO_SEED',
+            'workspace_id' => $workspace->id,
+            'project_id' => $project->id,
+            'user_id' => $owner->id,
+        ], [
+            'details' => 'สร้างข้อมูลเดโม (Owner + 2 Members)',
+        ]);
+
+        ActivityLog::firstOrCreate([
+            'action' => 'CREATE_TASK',
+            'project_id' => $project->id,
+            'user_id' => $member1->id,
+        ], [
+            'details' => 'Member One สร้างงานใหม่',
+        ]);
+
+        ActivityLog::firstOrCreate([
+            'action' => 'UPDATE_TASK',
+            'project_id' => $project->id,
+            'user_id' => $member2->id,
+        ], [
+            'details' => 'Member Two อัปเดตงานในบอร์ด',
+        ]);
     }
 }

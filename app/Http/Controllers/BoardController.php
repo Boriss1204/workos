@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Board;
-use App\Models\BoardColumn;
 use App\Models\Project;
 use App\Models\ProjectMember;
 
@@ -29,12 +27,15 @@ class BoardController extends Controller
         return null;
     }
 
-
     public function show(Project $project)
     {
         if ($redirect = $this->ensureProjectMember($project)) {
             return $redirect;
         }
+
+        // ===== รับค่าตัวกรองจาก query string =====
+        $priority = request('priority'); // urgent/high/medium/low หรือค่าในระบบคุณ
+        $creator  = request('creator');  // user_id ของผู้สร้างงาน (created_by)
 
         // ถ้ายังไม่มี board ให้สร้าง
         $board = $project->board;
@@ -50,17 +51,36 @@ class BoardController extends Controller
             }
         }
 
+        // ===== รายชื่อผู้สร้าง (dropdown) =====
+        // ใช้สมาชิกในโปรเจกต์เป็นตัวเลือก (owner + member)
+        $creators = ProjectMember::with('user')
+            ->where('project_id', $project->id)
+            ->get()
+            ->map(fn ($m) => $m->user)
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        // ===== โหลด board/columns/tasks พร้อม filter =====
         $project->load([
-            'board.columns' => fn($q) => $q->orderBy('position')->with([
-                'tasks' => fn($t) => $t->latest()->with([
-                    'assignee',
-                    'comments.user',
-                    'attachments.user',
-                ])
+            'board.columns' => fn ($q) => $q->orderBy('position')->with([
+                'tasks' => fn ($t) => $t->latest()
+                    ->when($priority, fn ($qq) => $qq->where('priority', $priority))
+                    ->when($creator, fn ($qq) => $qq->where('created_by', $creator))
+                    ->with([
+                        'assignee',
+                        'comments.user',
+                        'attachments.user',
+                    ])
             ])
         ]);
 
-        return view('boards.show', compact('project'));
+        return view('boards.show', compact(
+            'project',
+            'creators',
+            'priority',
+            'creator'
+        ));
     }
-
 }
+    

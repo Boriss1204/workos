@@ -22,7 +22,17 @@
                     </x-nav-link>
 
                     <x-nav-link :href="route('invites.index')" :active="request()->routeIs('invites.*')">
-                        Invites
+                        <span class="inline-flex items-center gap-2">
+                            <span>คำเชิญ</span>
+
+                            @if(($navPendingInvitesCount ?? 0) > 0)
+                                <span
+                                    class="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1
+                                        rounded-full bg-red-600 text-white text-xs font-bold">
+                                    {{ $navPendingInvitesCount }}
+                                </span>
+                            @endif
+                        </span>
                     </x-nav-link>
                 </div>
             </div>
@@ -82,7 +92,17 @@
             </x-responsive-nav-link>
 
             <x-responsive-nav-link :href="route('invites.index')" :active="request()->routeIs('invites.*')">
-                Invites
+                <span class="flex items-center justify-between w-full">
+                    <span>คำเชิญ</span>
+
+                    @if(($navPendingInvitesCount ?? 0) > 0)
+                        <span
+                            class="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1
+                                rounded-full bg-red-600 text-white text-xs font-bold">
+                            {{ $navPendingInvitesCount }}
+                        </span>
+                    @endif
+                </span>
             </x-responsive-nav-link>
         </div>
 
