@@ -21,33 +21,36 @@ class TaskAttachmentController extends Controller
         // เก็บใน storage/app/public/task_attachments
         $path = $file->store('task_attachments', 'public');
 
-        TaskAttachment::create([
-            'task_id' => $task->id,
-            'user_id' => Auth::id(),
-            'original_name' => $file->getClientOriginalName(),
-            'file_path' => $path,
-            'mime_type' => $file->getClientMimeType(),
-            'file_size' => $file->getSize(),
+        // ✅ สร้าง record แล้วเก็บลงตัวแปร $attachment (สำคัญมาก)
+        $attachment = \App\Models\TaskAttachment::create([
+            'task_id'        => $task->id,
+            'user_id'        => auth()->id(),
+            'file_path'      => $path,
+            'original_name'  => $file->getClientOriginalName(),
+            'mime_type'      => $file->getClientMimeType(),
+            'file_size'      => $file->getSize(),
         ]);
 
-            if (function_exists('log_activity')) {
-                $attachment->loadMissing('task');
+        // ✅ LOG
+        if (function_exists('log_activity')) {
+            $attachment->loadMissing('task');
 
-                $taskTitle = optional($attachment->task)->title ?? 'งาน';
-                $board = \App\Models\Board::find(optional($attachment->task)->board_id);
+            $taskTitle = optional($attachment->task)->title ?? 'งาน';
+            $board = \App\Models\Board::find(optional($attachment->task)->board_id);
+            $projectId = optional($board)->project_id;
 
-                log_activity(
-                    'ADD_ATTACHMENT',
-                    "แนบไฟล์ในงาน \"{$taskTitle}\"",
-                    null,
-                    optional($board)->project_id,
-                    Auth::id()
-                );
-            }
+            log_activity(
+                'ADD_ATTACHMENT',
+                "แนบไฟล์ให้กับงาน \"{$taskTitle}\"",
+                null,
+                $projectId,
+                auth()->id()
+            );
+        }
 
-
-        return redirect()->back();
+        return back()->with('success', 'อัปโหลดไฟล์เรียบร้อยแล้ว');
     }
+
 
     public function destroy(TaskAttachment $attachment)
     {

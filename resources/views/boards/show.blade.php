@@ -43,50 +43,50 @@
 
     {{-- ✅ ROOT state: filter + me อยู่ที่นี่ที่เดียว --}}
     <div class="p-6" x-data="{ filter: 'all', me: {{ (int)auth()->id() }} }">
+
         {{-- ✅ Server-side filter: Priority / Creator --}}
-<form method="GET" class="mb-4 flex flex-wrap items-end gap-3">
-    <div>
-        <label class="text-sm font-semibold text-gray-700">Priority</label>
-        <select name="priority" class="mt-1 border rounded-lg p-2 bg-white text-sm">
-            <option value="">ทั้งหมด</option>
-            <option value="urgent" @selected(($priority ?? '') === 'urgent')>Urgent</option>
-            <option value="high"   @selected(($priority ?? '') === 'high')>High</option>
-            <option value="normal" @selected(($priority ?? '') === 'normal')>Normal</option>
-            <option value="low"    @selected(($priority ?? '') === 'low')>Low</option>
-        </select>
-    </div>
+        <form method="GET" class="mb-4 flex flex-wrap items-end gap-3">
+            <div>
+                <label class="text-sm font-semibold text-gray-700">Priority</label>
+                <select name="priority" class="mt-1 border rounded-lg p-2 bg-white text-sm">
+                    <option value="">ทั้งหมด</option>
+                    <option value="urgent" @selected(($priority ?? '') === 'urgent')>Urgent</option>
+                    <option value="high"   @selected(($priority ?? '') === 'high')>High</option>
+                    <option value="normal" @selected(($priority ?? '') === 'normal')>Normal</option>
+                    <option value="low"    @selected(($priority ?? '') === 'low')>Low</option>
+                </select>
+            </div>
 
-    <div>
-        <label class="text-sm font-semibold text-gray-700">ผู้สร้าง</label>
-        <select name="creator" class="mt-1 border rounded-lg p-2 bg-white text-sm min-w-[220px]">
-            <option value="">ทั้งหมด</option>
-            @foreach(($creators ?? collect()) as $u)
-                <option value="{{ $u->id }}" @selected((string)($creator ?? '') === (string)$u->id)>
-                    {{ $u->name ?? $u->email }}
-                </option>
-            @endforeach
-        </select>
-    </div>
+            <div>
+                <label class="text-sm font-semibold text-gray-700">ผู้สร้าง</label>
+                <select name="creator" class="mt-1 border rounded-lg p-2 bg-white text-sm min-w-[220px]">
+                    <option value="">ทั้งหมด</option>
+                    @foreach(($creators ?? collect()) as $u)
+                        <option value="{{ $u->id }}" @selected((string)($creator ?? '') === (string)$u->id)>
+                            {{ $u->name ?? $u->email }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
 
-    <button type="submit"
-            class="!bg-blue-600 hover:!bg-blue-700 !text-white px-4 py-2 rounded-lg text-sm font-semibold">
-        Apply
-    </button>
+            <button type="submit"
+                    class="!bg-blue-600 hover:!bg-blue-700 !text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                Apply
+            </button>
 
-    <a href="{{ url()->current() }}"
-       class="border px-4 py-2 rounded-lg text-sm text-gray-700">
-        Reset
-    </a>
+            <a href="{{ url()->current() }}"
+               class="border px-4 py-2 rounded-lg text-sm text-gray-700">
+                Reset
+            </a>
 
-    <div class="ml-auto text-sm text-gray-500">
-        Filter(DB):
-        <span class="font-semibold text-gray-700">
-            {{ ($priority ?? '') ?: 'priority=all' }}
-            {{ ($creator ?? '') ? ' • creator='.$creator : ' • creator=all' }}
-        </span>
-    </div>
-</form>
-
+            <div class="ml-auto text-sm text-gray-500">
+                Filter(DB):
+                <span class="font-semibold text-gray-700">
+                    {{ ($priority ?? '') ?: 'priority=all' }}
+                    {{ ($creator ?? '') ? ' • creator='.$creator : ' • creator=all' }}
+                </span>
+            </div>
+        </form>
 
         {{-- Filter bar --}}
         <div class="mb-4 flex flex-wrap items-center gap-2">
@@ -174,16 +174,17 @@
 
                             {{-- ✅ Card --}}
                             <div data-task-card
-                                 class="group border border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition overflow-hidden"
+                                 class="group border rounded-xl bg-white shadow-sm hover:shadow-md transition overflow-hidden
+                                        {{ (int)($task->created_by ?? 0) === (int)auth()->id()
+                                            ? 'border-blue-300 ring-1 ring-blue-200'
+                                            : 'border-gray-200' }}"
                                  x-show="
                                     filter === 'all'
                                     || (filter === 'my' && {{ (int)($task->assignee_id ?? 0) }} === me)
                                     || (filter === 'unassigned' && {{ $task->assignee_id ? 'false' : 'true' }})
                                  "
                                  x-transition.opacity
-                                 x-data="{
-                                    openTask: false
-                                 }"
+                                 x-data="{ openTask: false }"
                                  @keydown.escape.window="openTask = false">
 
                                 {{-- Card body --}}
@@ -203,6 +204,16 @@
                                                 @if($task->created_at)
                                                     • {{ $task->created_at->format('d/m/Y H:i') }}
                                                 @endif
+                                            </div>
+
+                                            {{-- ✅ Creator badge (เพิ่มใหม่) --}}
+                                            <div class="mt-2">
+                                                <span class="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full
+                                                    {{ (int)($task->created_by ?? 0) === (int)auth()->id()
+                                                        ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                                        : 'bg-gray-50 text-gray-700 border border-gray-200' }}">
+                                                    ✍️ {{ $task->creator?->name ?? 'Unknown' }}
+                                                </span>
                                             </div>
                                         </button>
 

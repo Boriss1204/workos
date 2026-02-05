@@ -42,6 +42,11 @@ class Task extends Model
         return $this->belongsTo(\App\Models\User::class, 'assignee_id');
     }
 
+    public function creator()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'created_by');
+    }
+
 }
 
 

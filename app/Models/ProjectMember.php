@@ -12,6 +12,11 @@ class ProjectMember extends Model
         'role',
     ];
 
+    public function project()
+{
+    return $this->belongsTo(\App\Models\Project::class);
+}
+
     public function user()
 {
     return $this->belongsTo(\App\Models\User::class);
