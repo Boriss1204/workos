@@ -78,14 +78,6 @@
                class="border px-4 py-2 rounded-lg text-sm text-gray-700">
                 Reset
             </a>
-
-            <div class="ml-auto text-sm text-gray-500">
-                Filter(DB):
-                <span class="font-semibold text-gray-700">
-                    {{ ($priority ?? '') ?: 'priority=all' }}
-                    {{ ($creator ?? '') ? ' • creator='.$creator : ' • creator=all' }}
-                </span>
-            </div>
         </form>
 
         {{-- Filter bar --}}
@@ -111,12 +103,7 @@
                 Unassigned <span class="opacity-80">({{ $unassignedCount }})</span>
             </button>
 
-            <div class="ml-auto text-sm text-gray-500">
-                Showing:
-                <span class="font-semibold text-gray-700" x-text="filter"></span>
-            </div>
         </div>
-
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             @foreach($project->board->columns as $col)
                 {{-- ✅ Column scope: open + visibleCount เท่านั้น --}}
@@ -139,6 +126,7 @@
                     {{-- ✅ Tasks list (ทำให้ SortableJS จับได้) --}}
                     <div class="space-y-3 task-list"
                          data-column-id="{{ $col->id }}"
+                         data-column-name="{{ strtolower($col->name) }}"
                          x-ref="tasksWrap"
                          x-effect="
                             filter; // ✅ ทำให้ reactive ตาม filter
@@ -174,14 +162,24 @@
                                 $pm = $priorityMeta[$p] ?? $priorityMeta['normal'];
                             @endphp
 
+                            @php
+                                $isDoneColumn = strtolower($col->name) === 'done';
+                                $isOverdue = !$isDoneColumn && $task->due_date && \Carbon\Carbon::parse($task->due_date)->lt(today());
+                                $isDueToday = !$isDoneColumn && $task->due_date && \Carbon\Carbon::parse($task->due_date)->isToday();
+                            @endphp
+
+
                             {{-- ✅ Card (เพิ่ม task-card + data-task-id ให้ลากได้) --}}
                             <div data-task-card
-                                 class="task-card group border rounded-xl bg-white shadow-sm hover:shadow-md transition overflow-hidden
+                                class="task-card group border rounded-xl bg-white shadow-sm hover:shadow-md transition overflow-hidden
                                         {{ (int)($task->created_by ?? 0) === (int)auth()->id()
                                             ? 'border-blue-300 ring-1 ring-blue-200'
-                                            : 'border-gray-200' }}"
-                                 data-task-id="{{ $task->id }}"
-                                 data-current-column-id="{{ $task->column_id }}"
+                                            : 'border-gray-200' }}
+                                        {{ $isOverdue ? '!border-rose-500 ring-2 ring-rose-200 bg-rose-50' : '' }}
+                                        {{ $isDueToday ? '!border-amber-500 ring-2 ring-amber-200 bg-amber-50' : '' }}"
+                                data-task-id="{{ $task->id }}"
+                                data-current-column-id="{{ $task->column_id }}"
+                                data-due-date="{{ $task->due_date ? $task->due_date->format('Y-m-d') : '' }}"
                                  x-show="
                                     filter === 'all'
                                     || (filter === 'my' && {{ (int)($task->assignee_id ?? 0) }} === me)
@@ -209,6 +207,27 @@
                                                     • {{ $task->created_at->format('d/m/Y H:i') }}
                                                 @endif
                                             </div>
+                                            @if(!$isDoneColumn && $task->due_date)
+                                                @if($isOverdue)
+                                                    <div class="mt-2 inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+                                                        ⏰ Overdue
+                                                    </div>
+                                                    <div class="mt-1 text-xs text-rose-700 font-semibold">
+                                                        Due: {{ \Carbon\Carbon::parse($task->due_date)->format('d/m/Y') }}
+                                                    </div>
+                                                @elseif($isDueToday)
+                                                    <div class="mt-2 inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                                                        📅 Due today
+                                                    </div>
+                                                    <div class="mt-1 text-xs text-amber-800 font-semibold">
+                                                        Due: {{ \Carbon\Carbon::parse($task->due_date)->format('d/m/Y') }}
+                                                    </div>
+                                                @else
+                                                    <div class="mt-1 text-xs text-gray-500">
+                                                        Due: {{ \Carbon\Carbon::parse($task->due_date)->format('d/m/Y') }}
+                                                    </div>
+                                                @endif
+                                            @endif
 
                                             {{-- ✅ Creator badge --}}
                                             <div class="mt-2">
@@ -304,6 +323,14 @@
                                                                   rows="4"
                                                                   class="border rounded-lg p-2 w-full"
                                                                   placeholder="รายละเอียดงาน...">{{ $task->description }}</textarea>
+                                                    </div>
+
+                                                    <div>
+                                                        <label class="text-sm font-semibold text-gray-700">Due date</label>
+                                                        <input type="date"
+                                                            name="due_date"
+                                                            class="border rounded-lg p-2 w-full"
+                                                            value="{{ optional($task->due_date)->format('Y-m-d') }}">
                                                     </div>
 
                                                     <div class="flex justify-end">
@@ -480,27 +507,78 @@
                                                 </div>
                                             </div>
 
-                                            {{-- Add comment --}}
-                                            <form method="POST"
-                                                  action="{{ route('tasks.comments.store', $task->id) }}">
-                                                @csrf
+                                                {{-- Add comment (with @mention autocomplete) --}}
+                                                @php
+                                                    $mentionUsers = $projectMembers
+                                                        ->map(fn($pm) => [
+                                                            'id' => $pm->user->id,
+                                                            'name' => $pm->user->name ?? $pm->user->email,
+                                                            'email' => $pm->user->email,
+                                                        ])
+                                                        ->unique('id')
+                                                        ->values();
+                                                @endphp
 
-                                                <textarea name="comment" rows="3"
-                                                          class="border rounded-lg p-2 w-full"
-                                                          placeholder="พิมพ์คอมเมนต์..." required></textarea>
+                                                <form method="POST"
+                                                    action="{{ route('tasks.comments.store', $task->id) }}">
+                                                    @csrf
 
-                                                <div class="mt-3 flex justify-end gap-2">
-                                                    <button type="button"
-                                                            class="border px-4 py-2 rounded-lg"
-                                                            @click="openTask = false">
-                                                        Close
-                                                    </button>
-                                                    <button type="submit"
-                                                            class="!bg-blue-600 hover:!bg-blue-700 !text-white font-semibold px-4 py-2 rounded-lg shadow">
-                                                        Comment
-                                                    </button>
-                                                </div>
-                                            </form>
+                                                    <div
+                                                        x-data='mentionBox(@json($mentionUsers))' class="relative">
+
+                                                        class="relative"
+                                                    >
+                                                        <textarea
+                                                            name="comment"
+                                                            rows="3"
+                                                            class="border rounded-lg p-2 w-full"
+                                                            placeholder="พิมพ์คอมเมนต์... พิมพ์ @ เพื่อ mention"
+                                                            required
+                                                            x-ref="ta"
+                                                            x-model="text"
+                                                            @input="onInput"
+                                                            @keydown="onKeydown"
+                                                            @click="onInput"
+                                                        ></textarea>
+
+                                                        {{-- Dropdown --}}
+                                                        <div
+                                                            x-show="open && filtered.length > 0"
+                                                            x-cloak
+                                                            class="absolute z-50 mt-1 w-full max-h-56 overflow-auto bg-white border rounded-lg shadow"
+                                                            @mousedown.prevent
+                                                        >
+                                                            <template x-for="(u, idx) in filtered" :key="u.id">
+                                                                <button
+                                                                    type="button"
+                                                                    class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between"
+                                                                    :class="idx === activeIndex ? 'bg-gray-100' : ''"
+                                                                    @click="choose(idx)"
+                                                                >
+                                                                    <span class="font-semibold text-gray-900" x-text="u.name"></span>
+                                                                    <span class="text-xs text-gray-500" x-text="u.email"></span>
+                                                                </button>
+                                                            </template>
+                                                        </div>
+
+                                                        <div x-show="open && filtered.length === 0" x-cloak
+                                                            class="absolute z-50 mt-1 w-full bg-white border rounded-lg shadow px-3 py-2 text-sm text-gray-500">
+                                                            ไม่พบผู้ใช้
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="mt-3 flex justify-end gap-2">
+                                                        <button type="button"
+                                                                class="border px-4 py-2 rounded-lg"
+                                                                @click="openTask = false">
+                                                            Close
+                                                        </button>
+                                                        <button type="submit"
+                                                                class="!bg-blue-600 hover:!bg-blue-700 !text-white font-semibold px-4 py-2 rounded-lg shadow">
+                                                            Comment
+                                                        </button>
+                                                    </div>
+                                                </form>
 
                                             {{-- DELETE TASK --}}
                                             <form method="POST"
@@ -585,87 +663,255 @@
         <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
         <script>
-            (function () {
-                const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+        (function () {
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
 
-                function postMove(taskId, columnId, orderedTaskIds) {
-                    return fetch(`/tasks/${taskId}/move`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrf,
-                        },
-                        body: JSON.stringify({
-                            column_id: columnId,
-                            ordered_task_ids: orderedTaskIds
-                        })
-                    }).then(res => {
-                        if (!res.ok) throw new Error('Move failed');
-                        return res.json().catch(() => ({}));
+            window.addEventListener('pageshow', function (event) {
+                if (event.persisted) {
+                    window.location.reload();
+                }
+            });
+
+            function postMove(taskId, columnId, orderedTaskIds) {
+                return fetch(`/tasks/${taskId}/move`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrf,
+                    },
+                    body: JSON.stringify({
+                        column_id: columnId,
+                        ordered_task_ids: orderedTaskIds
+                    })
+                }).then(res => {
+                    if (!res.ok) throw new Error('Move failed');
+                    return res.json().catch(() => ({}));
+                });
+            }
+
+            // ===== STEP 2: helper สำหรับ sort DOM แบบไม่ต้อง refresh =====
+            function isOverdue(dueStr) {
+                if (!dueStr) return false;
+                const due = new Date(dueStr + 'T00:00:00');
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return due < today;
+            }
+
+            function isDueToday(dueStr) {
+                if (!dueStr) return false;
+                const due = new Date(dueStr + 'T00:00:00');
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return due.getTime() === today.getTime();
+            }
+
+            function sortColumnDOM(listEl) {
+                if (!listEl) return;
+
+                const colName = (listEl.dataset.columnName || '').toLowerCase();
+                const isDone = colName === 'done';
+
+                const cards = Array.from(listEl.querySelectorAll('.task-card'));
+                const originalIndex = new Map(cards.map((c, i) => [c, i])); // stable sort
+
+                const key = (card) => {
+                    const due = card.dataset.dueDate || '';
+
+                    if (isDone) return [9, 0, originalIndex.get(card)];
+                    if (isOverdue(due)) return [0, 0, originalIndex.get(card)];
+                    if (isDueToday(due)) return [1, 0, originalIndex.get(card)];
+                    if (due) return [2, new Date(due + 'T00:00:00').getTime(), originalIndex.get(card)];
+
+                    return [3, 0, originalIndex.get(card)];
+                };
+
+                cards.sort((a, b) => {
+                    const ka = key(a), kb = key(b);
+                    for (let i = 0; i < ka.length; i++) {
+                        if (ka[i] < kb[i]) return -1;
+                        if (ka[i] > kb[i]) return 1;
+                    }
+                    return 0;
+                });
+
+                // append กลับเข้าไปตามลำดับใหม่
+                cards.forEach(c => listEl.appendChild(c));
+
+                // ถ้าย้ายเข้า Done -> ถอด highlight ทันที (ไม่ต้อง refresh)
+                if (isDone) {
+                    cards.forEach(card => {
+                        card.classList.remove('!border-rose-500', 'ring-2', 'ring-rose-200', 'bg-rose-50');
+                        card.classList.remove('!border-amber-500', 'ring-amber-200', 'bg-amber-50');
                     });
                 }
+            }
 
-                function initSortable() {
-                    document.querySelectorAll('.task-list').forEach(list => {
-                        new Sortable(list, {
-                            group: 'tasks',
-                            animation: 150,
-                            onEnd: async function (evt) {
-                                const toList = evt.to;
-                                const toColumnId = toList.dataset.columnId;
-                                const movedTaskId = evt.item.dataset.taskId;
+            function initSortable() {
+                document.querySelectorAll('.task-list').forEach(list => {
+                    new Sortable(list, {
+                        group: 'tasks',
+                        animation: 150,
+                        onEnd: async function (evt) {
+                            const toList = evt.to;
+                            const fromList = evt.from;
 
-                                // อัปเดต dropdown ให้ตรงกับ column ใหม่
-                                const select = evt.item.querySelector('.task-status-select');
-                                if (select) select.value = toColumnId;
+                            const toColumnId = toList.dataset.columnId;
+                            const movedTaskId = evt.item.dataset.taskId;
 
-                                const orderedTaskIds = Array.from(toList.querySelectorAll('.task-card'))
-                                    .map(el => el.dataset.taskId);
+                            // อัปเดต dropdown ให้ตรงกับ column ใหม่
+                            const select = evt.item.querySelector('.task-status-select');
+                            if (select) select.value = toColumnId;
 
-                                try {
-                                    await postMove(movedTaskId, toColumnId, orderedTaskIds);
-                                } catch (e) {
-                                    alert('ย้ายงานไม่สำเร็จ');
-                                    location.reload();
-                                }
-                            }
-                        });
-                    });
-                }
-
-                function initStatusSelect() {
-                    document.querySelectorAll('.task-status-select').forEach(select => {
-                        select.addEventListener('change', async function () {
-                            const taskId = this.dataset.taskId;
-                            const toColumnId = this.value;
-
-                            const card = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
-                            const toList = document.querySelector(`.task-list[data-column-id="${toColumnId}"]`);
-
-                            if (!card || !toList) return;
-
-                            // ย้าย DOM ไปท้ายคอลัมน์ปลายทาง
-                            toList.appendChild(card);
-
-                            // สร้าง ordered list ใหม่
                             const orderedTaskIds = Array.from(toList.querySelectorAll('.task-card'))
                                 .map(el => el.dataset.taskId);
 
                             try {
-                                await postMove(taskId, toColumnId, orderedTaskIds);
+                                await postMove(movedTaskId, toColumnId, orderedTaskIds);
+
+                                // ✅ sort DOM ทันที (ปลายทาง + ต้นทาง)
+                                sortColumnDOM(toList);
+                                if (fromList && fromList !== toList) sortColumnDOM(fromList);
+
                             } catch (e) {
                                 alert('ย้ายงานไม่สำเร็จ');
                                 location.reload();
                             }
-                        });
+                        }
                     });
-                }
-
-                document.addEventListener('DOMContentLoaded', function () {
-                    initSortable();
-                    initStatusSelect();
                 });
-            })();
+            }
+
+            function initStatusSelect() {
+                document.querySelectorAll('.task-status-select').forEach(select => {
+                    select.addEventListener('change', async function () {
+                        const taskId = this.dataset.taskId;
+                        const toColumnId = this.value;
+
+                        const card = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
+                        const toList = document.querySelector(`.task-list[data-column-id="${toColumnId}"]`);
+
+                        if (!card || !toList) return;
+
+                        // ย้าย DOM ไปท้ายคอลัมน์ปลายทาง
+                        toList.appendChild(card);
+
+                        // สร้าง ordered list ใหม่
+                        const orderedTaskIds = Array.from(toList.querySelectorAll('.task-card'))
+                            .map(el => el.dataset.taskId);
+
+                        try {
+                            await postMove(taskId, toColumnId, orderedTaskIds);
+
+                            // ✅ sort DOM ทันที (ไม่ต้อง refresh)
+                            sortColumnDOM(toList);
+
+                        } catch (e) {
+                            alert('ย้ายงานไม่สำเร็จ');
+                            location.reload();
+                        }
+                    });
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                initSortable();
+                initStatusSelect();
+
+                // ✅ sort ตอนโหลดหน้า 1 ครั้ง (ให้ตรงกับกติกาเสมอ)
+                document.querySelectorAll('.task-list').forEach(list => sortColumnDOM(list));
+            });
+        })();
+        mentionBox();
         </script>
+
     </div>
+    <script>
+window.mentionBox = function(users) {
+    return {
+        users: users || [],
+        text: '',
+        open: false,
+        filtered: [],
+        activeIndex: 0,
+        atIndex: -1,
+        keyword: '',
+
+        onInput() {
+            const ta = this.$refs.ta;
+            if (!ta) return;
+
+            const pos = ta.selectionStart ?? 0;
+            const before = this.text.slice(0, pos);
+
+            const lastAt = before.lastIndexOf('@');
+            if (lastAt === -1) { this.close(); return; }
+
+            const charBefore = lastAt > 0 ? before[lastAt - 1] : ' ';
+            if (/[A-Za-z0-9_]/.test(charBefore)) { this.close(); return; }
+
+            const afterAt = before.slice(lastAt + 1);
+            if (/\s/.test(afterAt)) { this.close(); return; }
+
+            this.atIndex = lastAt;
+            this.keyword = afterAt;
+
+            const kw = this.keyword.toLowerCase();
+            this.filtered = this.users
+                .filter(u =>
+                    (u.name || '').toLowerCase().includes(kw) ||
+                    (u.email || '').toLowerCase().includes(kw)
+                )
+                .slice(0, 8);
+
+            this.open = true;
+            this.activeIndex = 0;
+        },
+
+        onKeydown(e) {
+            if (!this.open) return;
+
+            if (e.key === 'Escape') { e.preventDefault(); this.close(); return; }
+            if (e.key === 'ArrowDown') { e.preventDefault(); this.activeIndex = Math.min(this.activeIndex + 1, this.filtered.length - 1); return; }
+            if (e.key === 'ArrowUp') { e.preventDefault(); this.activeIndex = Math.max(this.activeIndex - 1, 0); return; }
+
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.choose(this.activeIndex);
+            }
+        },
+
+        choose(idx) {
+            const u = this.filtered[idx];
+            if (!u) return;
+
+            const ta = this.$refs.ta;
+            const pos = ta.selectionStart ?? this.text.length;
+
+            const before = this.text.slice(0, this.atIndex);
+            const after = this.text.slice(pos);
+
+            const mentionToken = '@' + (u.email || u.name); // ✅ แนะนำใช้ email ชัวร์สุด
+            this.text = before + mentionToken + ' ' + after;
+
+            this.$nextTick(() => {
+                const newPos = (before + mentionToken + ' ').length;
+                ta.focus();
+                ta.setSelectionRange(newPos, newPos);
+            });
+
+            this.close();
+        },
+
+        close() {
+            this.open = false;
+            this.filtered = [];
+            this.activeIndex = 0;
+            this.atIndex = -1;
+            this.keyword = '';
+        }
+    }
+}
+</script>
+
 </x-app-layout>

@@ -9,31 +9,116 @@ use Illuminate\Support\Facades\Auth;
 
 class TaskCommentController extends Controller
 {
-    public function store(Request $request, Task $task)
-    {
-        $request->validate([
-            'comment' => 'required|string',
-        ]);
+public function store(Request $request, Task $task)
+{
+    $request->validate([
+        'comment' => 'required|string|max:2000',
+    ]);
 
-        TaskComment::create([
-            'task_id' => $task->id,
-            'user_id' => Auth::id(),
-            'comment' => $request->comment,
-        ]);
+    $projectId = $task->board->project_id;
 
-        // Activity log (ถ้าคุณทำ log แล้ว)
-        if (function_exists('log_activity')) {
-            log_activity(
-                'ADD_COMMENT',
-                "เพิ่มคอมเมนต์ในงาน \"{$task->title}\"",
-                null,
-                \App\Models\Board::find($task->board_id)->project_id,
-                Auth::id()
-            );
-        }
+    // 1) สร้าง comment
+    $comment = $task->comments()->create([
+        'user_id' => auth()->id(),
+        'comment' => $request->comment,
+    ]);
 
-        return redirect()->back();
+    $commenterId = auth()->id();
+    $commenterName = auth()->user()->name ?? 'Someone';
+    $projectName = optional($task->board->project)->name ?? 'Project';
+
+    // เก็บ user_id ที่แจ้งไปแล้ว (กันซ้ำ)
+    $notifiedUserIds = collect();
+
+    // ===== 🔔 NOTI: ASSIGNEE =====
+    if ($task->assignee_id && $task->assignee_id !== $commenterId) {
+        notify_user(
+            $task->assignee_id,
+            'COMMENT_TASK',
+            '💬 มีคนคอมเมนต์งานของคุณ',
+            "{$commenterName}: \"{$task->title}\" ({$projectName})",
+            route('projects.board', $projectId),
+            [
+                'task_id' => $task->id,
+                'comment_id' => $comment->id,
+            ]
+        );
+        $notifiedUserIds->push($task->assignee_id);
     }
+
+    // ===== 🔔 NOTI: CREATOR =====
+    if (
+        $task->created_by &&
+        $task->created_by !== $commenterId &&
+        !$notifiedUserIds->contains($task->created_by)
+    ) {
+        notify_user(
+            $task->created_by,
+            'COMMENT_TASK',
+            '💬 มีคนคอมเมนต์งานที่คุณสร้าง',
+            "{$commenterName}: \"{$task->title}\" ({$projectName})",
+            route('projects.board', $projectId),
+            [
+                'task_id' => $task->id,
+                'comment_id' => $comment->id,
+            ]
+        );
+        $notifiedUserIds->push($task->created_by);
+    }
+
+    // ===== 🔔 NOTI: @MENTION =====
+    preg_match_all('/@([\w\.\-@]+)/', $request->comment, $matches);
+
+    if (!empty($matches[1])) {
+        $mentions = collect($matches[1])->unique();
+
+        foreach ($mentions as $mention) {
+
+            // หา user จาก name หรือ email
+            $user = \App\Models\User::query()
+                ->where('name', $mention)
+                ->orWhere('email', $mention)
+                ->first();
+
+            if (!$user) continue;
+
+            // ไม่แจ้งตัวเอง
+            if ($user->id === $commenterId) continue;
+
+            // ไม่แจ้งซ้ำ
+            if ($notifiedUserIds->contains($user->id)) continue;
+
+            notify_user(
+                $user->id,
+                'MENTION_TASK',
+                '👋 คุณถูก mention ในคอมเมนต์',
+                "{$commenterName} mention คุณในงาน \"{$task->title}\" ({$projectName})",
+                route('projects.board', $projectId),
+                [
+                    'task_id' => $task->id,
+                    'comment_id' => $comment->id,
+                ]
+            );
+
+            $notifiedUserIds->push($user->id);
+        }
+    }
+
+    // ===== LOG =====
+    if (function_exists('log_activity')) {
+        log_activity(
+            'COMMENT_TASK',
+            "คอมเมนต์งาน \"{$task->title}\"",
+            optional(optional($task->board)->project)->workspace_id,
+            $projectId,
+            $commenterId
+        );
+    }
+
+    return back()->with('success', 'เพิ่มคอมเมนต์แล้ว');
+}
+
+
 
     public function update(Request $request, TaskComment $comment)
 {

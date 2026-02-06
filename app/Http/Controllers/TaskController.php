@@ -165,6 +165,22 @@ class TaskController extends Controller
             'assignee_id' => $assigneeId,
         ]);
 
+        // ===== 🔔 SOFT NOTIFICATION (ข้อ 4 ใส่ตรงนี้) =====
+        if ($assigneeId && $assigneeId !== Auth::id()) {
+            notify_user(
+                $assigneeId,
+                'ASSIGN_TASK',
+                'คุณถูกมอบหมายงานใหม่',
+                "งาน: \"{$task->title}\"",
+                route('projects.board', $projectId),
+                [
+                    'task_id' => $task->id,
+                    'project_id' => $projectId,
+                ]
+            );
+        }
+        // ===== END NOTIFICATION =====
+
         if (function_exists('log_activity')) {
             $task->loadMissing('assignee', 'board.project');
 
@@ -230,10 +246,35 @@ class TaskController extends Controller
         $projectId = $this->projectIdFromTask($task);
         $this->ensureMemberOfProject($projectId);
 
+        /**
+         * 🔔 RESET overdue_notified_at
+         * - ถ้าแก้ due_date เป็น "วันนี้หรืออนาคต" → เคลียร์ flag (ไม่ overdue)
+         * - ถ้าแก้ due_date ใหม่ (แม้ยังเป็นอดีต) → เคลียร์ เพื่อให้แจ้งใหม่รอบถัดไป
+         */
+        $resetOverdueNoti = false;
+
+        if ($request->has('due_date')) {
+            if ($request->due_date) {
+                $newDue = \Carbon\Carbon::parse($request->due_date)->startOfDay();
+
+                // ไม่ overdue แล้ว หรือ user ตั้งวันใหม่ → reset flag
+                if ($newDue->gte(today())) {
+                    $resetOverdueNoti = true;
+                } else {
+                    // ยัง overdue แต่เป็น due_date ใหม่ → อนุญาตให้แจ้งใหม่
+                    $resetOverdueNoti = true;
+                }
+            } else {
+                // ลบ due_date ออก → reset flag
+                $resetOverdueNoti = true;
+            }
+        }
+
         $task->update([
             'title'       => $request->title,
             'description' => $request->description,
             'due_date'    => $request->due_date,
+            'overdue_notified_at' => $resetOverdueNoti ? null : $task->overdue_notified_at,
         ]);
 
         if (function_exists('log_activity')) {

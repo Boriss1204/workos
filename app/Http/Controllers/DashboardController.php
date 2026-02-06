@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;  
 use App\Models\Workspace;
 use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Models\ProjectInvite;
 use App\Models\ActivityLog;
+use App\Models\Task;
+use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
@@ -84,7 +87,82 @@ class DashboardController extends Controller
             ->take(5)
             ->get();
 
+        $today = Carbon::today();
+
+        $myFocusTasks = Task::query()
+            ->with(['board.project', 'column'])
+            ->where('assignee_id', Auth::id())
+            ->whereHas('column', fn ($q) =>
+                $q->whereRaw("LOWER(name) <> 'done'")
+            )
+            ->where(function ($q) use ($today) {
+                $q->whereNull('due_date')
+                ->orWhereDate('due_date', '<=', $today->copy()->addDays(3));
+            })
+            ->orderByRaw("
+                CASE
+                    WHEN due_date < ? THEN 1
+                    WHEN due_date = ? THEN 2
+                    WHEN due_date <= ? THEN 3
+                    ELSE 4
+                END
+            ", [
+                $today->toDateString(),
+                $today->toDateString(),
+                $today->copy()->addDays(3)->toDateString(),
+            ])
+            ->limit(5)
+            ->get();    
+
+        // ===== Analytics =====
+        $today = Carbon::today();
+
+        // งานทั้งหมดที่ user เกี่ยวข้อง
+        $totalTasks = Task::where(function ($q) {
+                $q->where('assignee_id', Auth::id())
+                ->orWhere('created_by', Auth::id());
+            })
+            ->count();
+
+        // งานที่เสร็จแล้ว
+        $doneTasks = Task::where(function ($q) {
+                $q->where('assignee_id', Auth::id())
+                ->orWhere('created_by', Auth::id());
+            })
+            ->whereHas('column', fn ($q) =>
+                $q->whereRaw("LOWER(name) = 'done'")
+            )
+            ->count();
+
+        // งาน overdue
+        $overdueTasks = Task::where('assignee_id', Auth::id())
+            ->whereNotNull('due_date')
+            ->whereDate('due_date', '<', $today)
+            ->whereHas('column', fn ($q) =>
+                $q->whereRaw("LOWER(name) <> 'done'")
+            )
+            ->count();
+
+        // งาน due today
+        $dueTodayTasks = Task::where('assignee_id', Auth::id())
+            ->whereDate('due_date', $today)
+            ->whereHas('column', fn ($q) =>
+                $q->whereRaw("LOWER(name) <> 'done'")
+            )
+            ->count();
+
+        // progress %
+        $progressPercent = $totalTasks > 0
+            ? round(($doneTasks / $totalTasks) * 100)
+            : 0;    
+
         return view('dashboard', compact(
+            'myFocusTasks',
+            'totalTasks',
+            'doneTasks',
+            'overdueTasks',
+            'dueTodayTasks',
+            'progressPercent',
             'workspacesCount',
             'pendingInvitesCount',
             'recentActivities',

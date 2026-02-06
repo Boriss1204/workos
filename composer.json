@@ -21,16 +21,18 @@
         "phpunit/phpunit": "^11.5.3"
     },
     "autoload": {
-    "psr-4": {
-        "App\\": "app/",
-        "Database\\Factories\\": "database/factories/",
-        "Database\\Seeders\\": "database/seeders/"
+        "psr-4": {
+            "App\\": "app/",
+            "Database\\Factories\\": "database/factories/",
+            "Database\\Seeders\\": "database/seeders/"
+        },
+        "files": [
+            "app/Helpers/activity.php",
+            "app/Helpers/activity_labels.php",
+            "app/Helpers/notify.php"
+        ]
     },
-    "files": [
-        "app/Helpers/activity.php",
-        "app/Helpers/activity_labels.php"
-    ]
-    },
+
     "autoload-dev": {
         "psr-4": {
             "Tests\\": "tests/"

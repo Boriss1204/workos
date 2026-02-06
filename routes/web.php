@@ -12,6 +12,8 @@ use App\Http\Controllers\TaskAttachmentController;
 use App\Http\Controllers\ProjectMemberController;
 use App\Http\Controllers\ProjectInviteController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\CalendarController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -70,6 +72,20 @@ Route::middleware('auth')->group(function () {
     Route::post('/invites/{invite}/accept', [ProjectInviteController::class, 'accept'])->name('invites.accept');
     Route::post('/invites/{invite}/decline', [ProjectInviteController::class, 'decline'])->name('invites.decline');
     Route::delete('/invites/{invite}', [ProjectInviteController::class, 'cancel'])->name('invites.cancel');
+
+    // Notifications
+    Route::get('/notifications', [NotificationController::class, 'index'])
+    ->name('notifications.index');
+
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'read'])
+        ->name('notifications.read');
+
+    Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])
+        ->name('notifications.readAll');
+
+    // Calendar
+    Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
+    Route::get('/calendar/events', [CalendarController::class, 'events'])->name('calendar.events');
 });
 
 require __DIR__.'/auth.php';

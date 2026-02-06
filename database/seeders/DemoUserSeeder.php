@@ -10,7 +10,6 @@ class DemoUserSeeder extends Seeder
 {
     public function run(): void
     {
-        User::truncate();
 
         User::create([
             'name' => 'Owner',

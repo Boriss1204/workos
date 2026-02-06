@@ -64,16 +64,30 @@ class BoardController extends Controller
         // ===== โหลด board/columns/tasks พร้อม filter =====
         $project->load([
             'board.columns' => fn ($q) => $q->orderBy('position')->with([
-               'tasks' => fn ($t) => $t->orderBy('position')
-                ->when($priority, fn ($qq) => $qq->where('priority', $priority))
-                ->when($creator, fn ($qq) => $qq->where('created_by', $creator))
-                ->with([
-                    'creator',
-                    'assignee',
-                    'comments.user',
-                    'attachments.user',
-                ])
-
+                'tasks' => function ($t) use ($priority, $creator) {
+                    $t->select('tasks.*')
+                    ->join('board_columns as bc', 'bc.id', '=', 'tasks.column_id')
+                    ->when($priority, fn ($qq) => $qq->where('tasks.priority', $priority))
+                    ->when($creator, fn ($qq) => $qq->where('tasks.created_by', $creator))
+                    ->orderByRaw("
+                        CASE
+                            WHEN LOWER(bc.name) = 'done' THEN 9
+                            WHEN tasks.due_date IS NOT NULL AND tasks.due_date < CURDATE() THEN 0
+                            WHEN tasks.due_date = CURDATE() THEN 1
+                            WHEN tasks.due_date IS NOT NULL THEN 2
+                            ELSE 3
+                        END ASC
+                    ")
+                    ->orderByRaw("tasks.due_date IS NULL ASC")
+                    ->orderBy('tasks.due_date')
+                    ->orderBy('tasks.position')
+                    ->with([
+                        'creator',
+                        'assignee',
+                        'comments.user',
+                        'attachments.user',
+                    ]);
+                },
             ])
         ]);
 

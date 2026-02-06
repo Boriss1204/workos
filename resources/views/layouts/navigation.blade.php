@@ -17,10 +17,17 @@
                         {{ __('Dashboard') }}
                     </x-nav-link>
 
+                    {{-- ✅ Workspaces --}}
                     <x-nav-link :href="route('workspaces.index')" :active="request()->routeIs('workspaces.*')">
                         Workspaces
                     </x-nav-link>
 
+                    {{-- ✅ Calendar --}}
+                    <x-nav-link :href="route('calendar.index')" :active="request()->routeIs('calendar.*')">
+                        Calendar
+                    </x-nav-link>
+
+                    {{-- ✅ Invites --}}
                     <x-nav-link :href="route('invites.index')" :active="request()->routeIs('invites.*')">
                         <span class="inline-flex items-center gap-2">
                             <span>คำเชิญ</span>
@@ -30,6 +37,21 @@
                                     class="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1
                                         rounded-full bg-red-600 text-white text-xs font-bold">
                                     {{ $navPendingInvitesCount }}
+                                </span>
+                            @endif
+                        </span>
+                    </x-nav-link>
+
+                    {{-- ✅ Notifications --}}
+                    <x-nav-link :href="route('notifications.index')" :active="request()->routeIs('notifications.*')">
+                        <span class="inline-flex items-center gap-2">
+                            <span>Notifications</span>
+
+                            @if(($navUnreadNotiCount ?? 0) > 0)
+                                <span
+                                    class="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1
+                                        rounded-full bg-rose-600 text-white text-xs font-bold">
+                                    {{ $navUnreadNotiCount }}
                                 </span>
                             @endif
                         </span>
@@ -91,6 +113,11 @@
                 Workspaces
             </x-responsive-nav-link>
 
+            {{-- ✅ Calendar (Mobile) --}}
+            <x-responsive-nav-link :href="route('calendar.index')" :active="request()->routeIs('calendar.*')">
+                Calendar
+            </x-responsive-nav-link>
+
             <x-responsive-nav-link :href="route('invites.index')" :active="request()->routeIs('invites.*')">
                 <span class="flex items-center justify-between w-full">
                     <span>คำเชิญ</span>
@@ -100,6 +127,21 @@
                             class="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1
                                 rounded-full bg-red-600 text-white text-xs font-bold">
                             {{ $navPendingInvitesCount }}
+                        </span>
+                    @endif
+                </span>
+            </x-responsive-nav-link>
+
+            {{-- ✅ Notifications (Mobile) --}}
+            <x-responsive-nav-link :href="route('notifications.index')" :active="request()->routeIs('notifications.*')">
+                <span class="flex items-center justify-between w-full">
+                    <span>Notifications</span>
+
+                    @if(($navUnreadNotiCount ?? 0) > 0)
+                        <span
+                            class="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1
+                                rounded-full bg-rose-600 text-white text-xs font-bold">
+                            {{ $navUnreadNotiCount }}
                         </span>
                     @endif
                 </span>
