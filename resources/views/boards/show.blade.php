@@ -136,8 +136,10 @@
                         </button>
                     </div>
 
-                    {{-- Tasks list --}}
-                    <div class="space-y-3" x-ref="tasksWrap"
+                    {{-- ✅ Tasks list (ทำให้ SortableJS จับได้) --}}
+                    <div class="space-y-3 task-list"
+                         data-column-id="{{ $col->id }}"
+                         x-ref="tasksWrap"
                          x-effect="
                             filter; // ✅ ทำให้ reactive ตาม filter
                             $nextTick(() => {
@@ -172,12 +174,14 @@
                                 $pm = $priorityMeta[$p] ?? $priorityMeta['normal'];
                             @endphp
 
-                            {{-- ✅ Card --}}
+                            {{-- ✅ Card (เพิ่ม task-card + data-task-id ให้ลากได้) --}}
                             <div data-task-card
-                                 class="group border rounded-xl bg-white shadow-sm hover:shadow-md transition overflow-hidden
+                                 class="task-card group border rounded-xl bg-white shadow-sm hover:shadow-md transition overflow-hidden
                                         {{ (int)($task->created_by ?? 0) === (int)auth()->id()
                                             ? 'border-blue-300 ring-1 ring-blue-200'
                                             : 'border-gray-200' }}"
+                                 data-task-id="{{ $task->id }}"
+                                 data-current-column-id="{{ $task->column_id }}"
                                  x-show="
                                     filter === 'all'
                                     || (filter === 'my' && {{ (int)($task->assignee_id ?? 0) }} === me)
@@ -206,7 +210,7 @@
                                                 @endif
                                             </div>
 
-                                            {{-- ✅ Creator badge (เพิ่มใหม่) --}}
+                                            {{-- ✅ Creator badge --}}
                                             <div class="mt-2">
                                                 <span class="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full
                                                     {{ (int)($task->created_by ?? 0) === (int)auth()->id()
@@ -238,30 +242,28 @@
                                     </div>
                                 </div>
 
-                                {{-- Card footer: Move status --}}
+                                {{-- ✅ Card footer: Status dropdown (ใช้ JS ไม่ submit form แล้ว) --}}
                                 <div class="px-3 py-2 bg-gray-50 border-t border-gray-200">
-                                    <form method="POST"
-                                          action="{{ route('tasks.move', $task->id) }}"
-                                          class="flex items-center justify-between gap-2">
-                                        @csrf
-
+                                    <div class="flex items-center justify-between gap-2">
                                         <div class="text-xs text-gray-500">
                                             Status
                                         </div>
 
-                                        <select name="column_id"
-                                                class="border rounded-lg p-2 text-sm bg-white"
-                                                onchange="this.form.submit()">
+                                        <select
+                                            class="border rounded-lg p-2 text-sm bg-white task-status-select"
+                                            data-task-id="{{ $task->id }}"
+                                            data-from-column-id="{{ $task->column_id }}"
+                                        >
                                             @foreach($project->board->columns as $c)
                                                 <option value="{{ $c->id }}" @selected($c->id == $task->column_id)>
                                                     {{ $c->name }}
                                                 </option>
                                             @endforeach
                                         </select>
-                                    </form>
+                                    </div>
                                 </div>
 
-                                {{-- ✅ Task Detail Modal (ทุกอย่างอยู่ “ข้างใน” modal เท่านั้น) --}}
+                                {{-- ✅ Task Detail Modal --}}
                                 <div x-show="openTask" x-cloak
                                      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
                                      @click.self="openTask = false">
@@ -500,7 +502,7 @@
                                                 </div>
                                             </form>
 
-                                            {{-- DELETE TASK (แยก form ไม่ซ้อน) --}}
+                                            {{-- DELETE TASK --}}
                                             <form method="POST"
                                                   action="{{ route('tasks.destroy', $task->id) }}"
                                                   class="pt-4 border-t"
@@ -578,5 +580,92 @@
                 </div>
             @endforeach
         </div>
+
+        {{-- SortableJS --}}
+        <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+        <script>
+            (function () {
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+
+                function postMove(taskId, columnId, orderedTaskIds) {
+                    return fetch(`/tasks/${taskId}/move`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrf,
+                        },
+                        body: JSON.stringify({
+                            column_id: columnId,
+                            ordered_task_ids: orderedTaskIds
+                        })
+                    }).then(res => {
+                        if (!res.ok) throw new Error('Move failed');
+                        return res.json().catch(() => ({}));
+                    });
+                }
+
+                function initSortable() {
+                    document.querySelectorAll('.task-list').forEach(list => {
+                        new Sortable(list, {
+                            group: 'tasks',
+                            animation: 150,
+                            onEnd: async function (evt) {
+                                const toList = evt.to;
+                                const toColumnId = toList.dataset.columnId;
+                                const movedTaskId = evt.item.dataset.taskId;
+
+                                // อัปเดต dropdown ให้ตรงกับ column ใหม่
+                                const select = evt.item.querySelector('.task-status-select');
+                                if (select) select.value = toColumnId;
+
+                                const orderedTaskIds = Array.from(toList.querySelectorAll('.task-card'))
+                                    .map(el => el.dataset.taskId);
+
+                                try {
+                                    await postMove(movedTaskId, toColumnId, orderedTaskIds);
+                                } catch (e) {
+                                    alert('ย้ายงานไม่สำเร็จ');
+                                    location.reload();
+                                }
+                            }
+                        });
+                    });
+                }
+
+                function initStatusSelect() {
+                    document.querySelectorAll('.task-status-select').forEach(select => {
+                        select.addEventListener('change', async function () {
+                            const taskId = this.dataset.taskId;
+                            const toColumnId = this.value;
+
+                            const card = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
+                            const toList = document.querySelector(`.task-list[data-column-id="${toColumnId}"]`);
+
+                            if (!card || !toList) return;
+
+                            // ย้าย DOM ไปท้ายคอลัมน์ปลายทาง
+                            toList.appendChild(card);
+
+                            // สร้าง ordered list ใหม่
+                            const orderedTaskIds = Array.from(toList.querySelectorAll('.task-card'))
+                                .map(el => el.dataset.taskId);
+
+                            try {
+                                await postMove(taskId, toColumnId, orderedTaskIds);
+                            } catch (e) {
+                                alert('ย้ายงานไม่สำเร็จ');
+                                location.reload();
+                            }
+                        });
+                    });
+                }
+
+                document.addEventListener('DOMContentLoaded', function () {
+                    initSortable();
+                    initStatusSelect();
+                });
+            })();
+        </script>
     </div>
 </x-app-layout>

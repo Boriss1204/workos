@@ -6,8 +6,10 @@ use App\Models\Board;
 use App\Models\BoardColumn;
 use App\Models\ProjectMember;
 use App\Models\Task;
+use App\Models\Project;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class TaskController extends Controller
 {
@@ -49,6 +51,8 @@ class TaskController extends Controller
         $projectId = (int) Board::where('id', $column->board_id)->value('project_id');
         $this->ensureMemberOfProject($projectId);
 
+        $maxPos = Task::where('column_id', $column->id)->max('position') ?? 0;
+
         $task = Task::create([
             'board_id'    => $column->board_id,
             'column_id'   => $column->id,
@@ -56,6 +60,7 @@ class TaskController extends Controller
             'title'       => $request->title,
             'description' => $request->input('description'), // เผื่อไว้ (nullable)
             'priority'    => 'normal',
+            'position'    => $maxPos + 1,
         ]);
 
         if (function_exists('log_activity')) {
@@ -73,31 +78,66 @@ class TaskController extends Controller
 
     public function move(Request $request, Task $task)
     {
-        $request->validate([
+        $data = $request->validate([
             'column_id' => 'required|exists:board_columns,id',
+            'ordered_task_ids' => 'required|array',
+            'ordered_task_ids.*' => 'integer',
         ]);
 
         $projectId = $this->projectIdFromTask($task);
         $this->ensureMemberOfProject($projectId);
 
-        $task->update([
-            'column_id' => $request->column_id,
-        ]);
+        $fromColumnId = (int) $task->column_id;
+        $fromColumnName = (string) \App\Models\BoardColumn::where('id', $fromColumnId)->value('name');
+        $toColumnId = (int) $data['column_id'];
+        $toColumnName = (string) \App\Models\BoardColumn::where('id', $toColumnId)->value('name');
 
-        $task->load(['column', 'board']);
+        // กันย้ายข้ามโปรเจกต์ (toColumn ต้องอยู่ board/project เดียวกัน)
+        $toProjectId = (int) \App\Models\BoardColumn::join('boards', 'boards.id', '=', 'board_columns.board_id')
+            ->where('board_columns.id', $toColumnId)
+            ->value('boards.project_id');
 
+        abort_unless($toProjectId === $projectId, 403);
+
+        \DB::transaction(function () use ($task, $data, $toColumnId) {
+
+            if ((int)$task->column_id !== (int)$toColumnId) {
+                $task->update(['column_id' => $toColumnId]);
+            }
+
+            foreach ($data['ordered_task_ids'] as $index => $id) {
+                Task::where('id', (int)$id)
+                    ->where('column_id', $toColumnId)
+                    ->update(['position' => $index + 1]);
+            }
+        });
+
+        // ✅ log
         if (function_exists('log_activity')) {
-            log_activity(
-                'MOVE_TASK',
-                "ย้ายงาน \"{$task->title}\" ไปยังคอลัมน์ {$task->column->name}",
-                null,
-                $task->board->project_id,
-                Auth::id()
-            );
+            $workspaceId = (int) \App\Models\Project::where('id', $projectId)->value('workspace_id');
+
+            if ($fromColumnId === $toColumnId) {
+                log_activity(
+                    'REORDER_TASK',
+                    "จัดลำดับงานใหม่ในคอลัมน์ \"{$fromColumnName}\"",
+                    $workspaceId,
+                    $projectId,
+                    Auth::id()
+                );
+            } else {
+                log_activity(
+                    'MOVE_TASK',
+                    "ย้ายงาน \"{$task->title}\" จากคอลัมน์ \"{$fromColumnName}\" ไปยังคอลัมน์ \"{$toColumnName}\"",
+                    $workspaceId,
+                    $projectId,
+                    Auth::id()
+                );
+            }
         }
 
-        return back();
+        return response()->json(['ok' => true]);
     }
+
 
     public function assign(Request $request, Task $task)
     {
@@ -197,6 +237,9 @@ class TaskController extends Controller
         ]);
 
         if (function_exists('log_activity')) {
+            // ✅ กัน workspaceId เป็น null
+            $task->loadMissing('board.project');
+
             log_activity(
                 'UPDATE_TASK',
                 "แก้ไขงาน \"{$task->title}\"",

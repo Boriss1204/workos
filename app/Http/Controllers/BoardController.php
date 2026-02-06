@@ -64,15 +64,16 @@ class BoardController extends Controller
         // ===== โหลด board/columns/tasks พร้อม filter =====
         $project->load([
             'board.columns' => fn ($q) => $q->orderBy('position')->with([
-                'tasks' => fn ($t) => $t->latest()
-                    ->when($priority, fn ($qq) => $qq->where('priority', $priority))
-                    ->when($creator, fn ($qq) => $qq->where('created_by', $creator))
-                    ->with([
-                        'creator',
-                        'assignee',
-                        'comments.user',
-                        'attachments.user',
-                    ])
+               'tasks' => fn ($t) => $t->orderBy('position')
+                ->when($priority, fn ($qq) => $qq->where('priority', $priority))
+                ->when($creator, fn ($qq) => $qq->where('created_by', $creator))
+                ->with([
+                    'creator',
+                    'assignee',
+                    'comments.user',
+                    'attachments.user',
+                ])
+
             ])
         ]);
 
